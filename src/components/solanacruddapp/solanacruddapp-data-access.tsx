@@ -10,6 +10,12 @@ import { useCluster } from '../cluster/cluster-data-access'
 import { useAnchorProvider } from '../solana/solana-provider'
 import { useTransactionToast } from '../ui/ui-layout'
 
+interface CreateEntryState {
+  title: string;
+  message: string;
+  owner: PublicKey;
+}
+
 export function useSolanacruddappProgram() {
   const { connection } = useConnection()
   const { cluster } = useCluster()
@@ -20,7 +26,7 @@ export function useSolanacruddappProgram() {
 
   const accounts = useQuery({
     queryKey: ['solanacruddapp', 'all', { cluster }],
-    queryFn: () => program.account.solanacruddapp.all(),
+    queryFn: () => program.account.journalEntryState.all(),
   })
 
   const getProgramAccount = useQuery({
@@ -28,23 +34,28 @@ export function useSolanacruddappProgram() {
     queryFn: () => connection.getParsedAccountInfo(programId),
   })
 
-  const initialize = useMutation({
-    mutationKey: ['solanacruddapp', 'initialize', { cluster }],
-    mutationFn: (keypair: Keypair) =>
-      program.methods.initialize().accounts({ solanacruddapp: keypair.publicKey }).signers([keypair]).rpc(),
-    onSuccess: (signature) => {
-      transactionToast(signature)
-      return accounts.refetch()
+  const createEntry = useMutation<string, Error, CreateEntryState> ({
+    mutationKey: ['journalEntry', 'create', { cluster }],
+    mutationFn: async({title, message, owner}) => {
+      return program.methods.createJournalEntry(title, message).rpc();
     },
-    onError: () => toast.error('Failed to initialize account'),
+    onSuccess: (signature) => {
+      transactionToast(signature);
+      accounts.refetch();
+    },
+    onError: (error) => {
+      toast.error(`Error in creating entry ${error.message}`);
+    }
   })
+
+
 
   return {
     program,
     programId,
     accounts,
     getProgramAccount,
-    initialize,
+    createEntry
   }
 }
 
@@ -55,50 +66,41 @@ export function useSolanacruddappProgramAccount({ account }: { account: PublicKe
 
   const accountQuery = useQuery({
     queryKey: ['solanacruddapp', 'fetch', { cluster, account }],
-    queryFn: () => program.account.solanacruddapp.fetch(account),
+    queryFn: () => program.account.journalEntryState.fetch(account),
   })
 
-  const closeMutation = useMutation({
-    mutationKey: ['solanacruddapp', 'close', { cluster, account }],
-    mutationFn: () => program.methods.close().accounts({ solanacruddapp: account }).rpc(),
-    onSuccess: (tx) => {
-      transactionToast(tx)
-      return accounts.refetch()
+  
+  const updateEntry = useMutation<string, Error, CreateEntryState> ({
+    mutationKey: ['journalEntry', 'update', { cluster }],
+    mutationFn: async({title, message}) => {
+      return program.methods.updateJournalEntry(title, message).rpc();
     },
+    onSuccess: (signature) => {
+      transactionToast(signature);
+      accounts.refetch();
+    },
+    onError: (error) => {
+      toast.error(`Error in updating entry ${error.message}`);
+    }
   })
 
-  const decrementMutation = useMutation({
-    mutationKey: ['solanacruddapp', 'decrement', { cluster, account }],
-    mutationFn: () => program.methods.decrement().accounts({ solanacruddapp: account }).rpc(),
-    onSuccess: (tx) => {
-      transactionToast(tx)
-      return accountQuery.refetch()
+  const deleteEntry = useMutation({
+    mutationKey: ['journalEntry', 'delete', { cluster }],
+    mutationFn: async(title: string) => {
+      return program.methods.deleteJournalEntry(title).rpc();
     },
-  })
-
-  const incrementMutation = useMutation({
-    mutationKey: ['solanacruddapp', 'increment', { cluster, account }],
-    mutationFn: () => program.methods.increment().accounts({ solanacruddapp: account }).rpc(),
-    onSuccess: (tx) => {
-      transactionToast(tx)
-      return accountQuery.refetch()
+    onSuccess: (signature) => {
+      transactionToast(signature);
+      accounts.refetch();
     },
-  })
-
-  const setMutation = useMutation({
-    mutationKey: ['solanacruddapp', 'set', { cluster, account }],
-    mutationFn: (value: number) => program.methods.set(value).accounts({ solanacruddapp: account }).rpc(),
-    onSuccess: (tx) => {
-      transactionToast(tx)
-      return accountQuery.refetch()
-    },
+    onError: (error) => {
+      toast.error(`Error in updating entry ${error.message}`);
+    }
   })
 
   return {
     accountQuery,
-    closeMutation,
-    decrementMutation,
-    incrementMutation,
-    setMutation,
+    updateEntry,
+    deleteEntry
   }
 }
